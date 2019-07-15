@@ -51,7 +51,7 @@ namespace BaiduSpeechDemo
 
         public bool initStatus;
 
-        public Speakers()
+        private Speakers()
         {
             try
             {
