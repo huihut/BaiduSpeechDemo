@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:BaiduSpeechDemo"
         mc:Ignorable="d"
-        Title="BaiduSpeechDemo" Height="220" Width="500">
+        Title="BaiduSpeechDemo" Height="180" Width="500">
     <StackPanel HorizontalAlignment="Center">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="top" Orientation="Horizontal">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="top" Orientation="Vertical" Margin="0,10,0,0">
@@ -22,9 +22,8 @@
             <TextBox x:Name="SpeakText" Text="HuiHut的百度语音测试" Height="30" Width="400" Margin="0,10,10,0" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalContentAlignment="Center" IsEnabled="False"/>
             <Button x:Name="PlaySoundButton" Content="语音合成" Width="65" Height="30" Click="PlaySound_Click" IsEnabled="False"/>
         </StackPanel>
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="top" Orientation="Horizontal">
-            <TextBlock x:Name="TipsText" TextWrapping="Wrap" Text="" Width="400" Margin="0,10,10,0" HorizontalAlignment="Center" />
-            <Button x:Name="OpenExplorerButton" Content="打开文件夹" Width="65" Height="30" Click="OpenExplorer_Click" Visibility="Hidden"/>
+        <StackPanel HorizontalAlignment="Left" VerticalAlignment="top" Orientation="Horizontal">
+            <TextBlock x:Name="TipsText" TextWrapping="Wrap" Text="" Width="400" Margin="5,10,10,0" HorizontalAlignment="Center" />
         </StackPanel>
     </StackPanel>
 

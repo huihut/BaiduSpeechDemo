@@ -47,42 +47,50 @@ namespace BaiduSpeechDemo
             // （选填）3为mp3格式(默认)； 4为pcm-16k；5为pcm-8k；6为wav（内容同pcm-16k）; 注意aue=4或者6是语音识别要求的格式，但是音频内容不是语音识别要求的自然人发音，所以识别效果会受影响。
             public string aue;
         }
-        private BaiduTTSConfig baiduTTS;
+        private BaiduTTSConfig baiduTTSConfig;
 
-        public bool initStatus;
+        public bool isInit = false;
+
+        // 文本请求队列
+        private Queue<string> textRequestQueue = new Queue<string>();
+        private Thread textRequestQueueThread;
+
+        // 流播放队列
+        private Queue<Stream> streamPlayQueue = new Queue<Stream>();
+        private static readonly int streamPlayQueueMaxCount = 10;
+        private Thread streamPlayQueueThread;
 
         private Speakers()
         {
             try
             {
                 // 使用默认参数构造百度TTS
-                baiduTTS = new BaiduTTSConfig()
+                baiduTTSConfig = new BaiduTTSConfig()
                 {
                     lan = "zh",
                     ctp = "1",
-                    cuid = GetMacByNetworkInterface(),
-                    vol = "9",
+                    cuid = GetMacAddress(),
+                    vol = "15",
                     per = "0",
                     spd = "5",
                     pit = "5",
-                    aue = "3"
+                    aue = "6"
                 };
             }
             catch (Exception e1)
             {
                 System.Diagnostics.Debug.WriteLine("Speakers Speakers, " + e1.Message);
             }
-            initStatus = false;
         }
 
         public void Init(string api_key, string secret_key)
         {
             try
             {
-                if(!string.IsNullOrEmpty(api_key) && !string.IsNullOrEmpty(secret_key))
+                if(!isInit && !string.IsNullOrEmpty(api_key) && !string.IsNullOrEmpty(secret_key))
                 {
-                    baiduTTS.api_key = api_key;
-                    baiduTTS.secret_key = secret_key;
+                    baiduTTSConfig.api_key = api_key;
+                    baiduTTSConfig.secret_key = secret_key;
 
                     // 初始化百度 TTS，获得 token
                     ThreadPool.QueueUserWorkItem(new WaitCallback((state) =>
@@ -90,9 +98,9 @@ namespace BaiduSpeechDemo
                         try
                         {
                             string url = string.Format("https://openapi.baidu.com/oauth/2.0/token?grant_type=client_credentials&client_id={0}&client_secret={1}",
-                                    baiduTTS.api_key, baiduTTS.secret_key);
+                                    baiduTTSConfig.api_key, baiduTTSConfig.secret_key);
 
-                            string json = HttpPostRequest(url);
+                            string json = HttpPostRequestGetJson(url);
 
                             // 检验有效期，单位秒
                             string expires_in = GetArribute(json, "expires_in");
@@ -100,20 +108,20 @@ namespace BaiduSpeechDemo
                             {
                                 // 语音合成已经过期
                                 System.Diagnostics.Debug.WriteLine(string.Format("Baidu TTS has expired, request link is: {0}；return Json is: {1}", url, json));
-                                initStatus = false;
+                                isInit = false;
                                 return;
                             }
 
                             // 检验 token
                             string token = GetArribute(json, "access_token");
-                            baiduTTS.tok = token ?? baiduTTS.tok;
+                            baiduTTSConfig.tok = token ?? baiduTTSConfig.tok;
 
-                            initStatus = true;
+                            isInit = true;
                         }
                         catch (Exception e1)
                         {
                             System.Diagnostics.Debug.WriteLine("Speakers Init QueueUserWorkItem, " + e1.Message);
-                            initStatus = false;
+                            isInit = false;
                         }
                     }), null);
                 }
@@ -121,38 +129,125 @@ namespace BaiduSpeechDemo
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("Speakers Init," + ex.Message);
-                initStatus = false;
             }
         }
 
         /// <summary>
-        /// 语音合成
+        /// TTS 语音合成
         /// </summary>
         /// <param name="text">需要语音合成的文本内容</param>
-        /// <returns>网络请求回来的音频文件在本地保存的路径</returns>
-        public string Speak(string text)
+        /// 
+        ///        Speak
+        ///      |  文本  |
+        ///      |  文本  |    文本请求队列（textRequestQueue）
+        ///      |  文本  |
+        ///  HttpPostRequestGetStream
+        ///      |   流   |    
+        ///      |   流   |    流播放队列（streamPlayQueue）
+        ///      |   流   |
+        ///      SoundPlayer
+        ///   
+        public void Speak(string text)
         {
             if (!string.IsNullOrEmpty(text))
             {
                 try
                 {
-                    baiduTTS.tex = text;
-                    string url = String.Format("http://tsn.baidu.com/text2audio?lan={0}&ctp={1}&cuid={2}&tok={3}&tex={4}&vol={5}&per={6}&spd={7}&pit={8}&aue={9}",
-                        baiduTTS.lan, baiduTTS.ctp, baiduTTS.cuid, baiduTTS.tok, baiduTTS.tex, baiduTTS.vol, baiduTTS.per, baiduTTS.spd, baiduTTS.pit, baiduTTS.aue);
-                    string mp3FilePathName = String.Format(@"{0}\{1}_{2}.mp3", GetCachePath(), DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss"), baiduTTS.tex);
-                    
-                    return HttpPostMessage(url, mp3FilePathName);
+                    if (!isInit || string.IsNullOrEmpty(text))
+                        return;
+
+                    // 文本请求入队
+                    lock (textRequestQueue)
+                    {
+                        textRequestQueue.Enqueue(text);
+                    }
+
+                    if (streamPlayQueue.Count() >= streamPlayQueueMaxCount)
+                        return;
+
+                    // 线程为空或者线程退出（正常终止，异常退出）时重新构造和启动线程
+                    if (textRequestQueueThread == null || textRequestQueueThread.ThreadState == ThreadState.Stopped)
+                    {
+                        textRequestQueueThread = new Thread(TextRequestQueueConsumer);
+                        textRequestQueueThread.Start();
+                    }
                 }
                 catch (Exception e1)
                 {
                     System.Diagnostics.Debug.WriteLine("Speakers Speak, " + e1.Message);
                 }
             }
-            return "";
         }
-        
+
+        // 文本请求队列消费者
+        // 文本从文本请求队列出队，用于 Http 请求，把请求到的音频文件流入队流播放队列
+        private void TextRequestQueueConsumer()
+        {
+            try
+            {
+                while (textRequestQueue.Count() > 0 && streamPlayQueue.Count() < streamPlayQueueMaxCount)
+                {
+                    string text;
+                    // 文本请求出队
+                    lock (textRequestQueue)
+                    {
+                        text = textRequestQueue.Dequeue();
+                    }
+                    string url = String.Format("http://tsn.baidu.com/text2audio?lan={0}&ctp={1}&cuid={2}&tok={3}&tex={4}&vol={5}&per={6}&spd={7}&pit={8}&aue={9}",
+                        baiduTTSConfig.lan, baiduTTSConfig.ctp, baiduTTSConfig.cuid, baiduTTSConfig.tok, text, baiduTTSConfig.vol, baiduTTSConfig.per, baiduTTSConfig.spd, baiduTTSConfig.pit, baiduTTSConfig.aue);
+
+                    // Http 请求音频流
+                    Stream fileStream = HttpPostRequestGetStream(url);
+                    if (fileStream != null)
+                    {
+                        // 音频流入队
+                        lock (streamPlayQueue)
+                        {
+                            streamPlayQueue.Enqueue(fileStream);
+                        }
+
+                        // 线程为空或者线程退出（正常终止，异常退出）时重新构造和启动线程
+                        if (streamPlayQueueThread == null || streamPlayQueueThread.ThreadState == ThreadState.Stopped)
+                        {
+                            streamPlayQueueThread = new Thread(StreamPlayQueueConsumer);
+                            streamPlayQueueThread.Start();
+                        }
+                    }
+                }
+            }
+            catch (Exception e1)
+            {
+                System.Diagnostics.Debug.WriteLine("Speakers TextRequestQueueConsumer, " + e1.Message);
+            }
+        }
+
+        // 流播放队列消费者
+        // 流从流播放队列出队，PlaySync 同步播放
+        private void StreamPlayQueueConsumer()
+        {
+            try
+            {
+                while (streamPlayQueue.Count() > 0)
+                {
+                    // 音频流出队
+                    lock (streamPlayQueue)
+                    {
+                        using (System.Media.SoundPlayer soundPlayer = new System.Media.SoundPlayer(streamPlayQueue.Dequeue()))
+                        {
+                            // 同步播放
+                            soundPlayer.PlaySync();
+                        }
+                    }
+                }
+            }
+            catch (Exception e1)
+            {
+                System.Diagnostics.Debug.WriteLine("Speakers StreamPlayQueueConsumer, " + e1.Message);
+            }
+        }
+
         // Http 请求 Json 数据
-        private string HttpPostRequest(string url)
+        public static string HttpPostRequestGetJson(string url)
         {
             HttpWebRequest request = null;
             HttpWebResponse response = null;
@@ -168,7 +263,7 @@ namespace BaiduSpeechDemo
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("Speakers HttpPostRequest," + ex.Message);
+                System.Diagnostics.Debug.WriteLine("Speakers HttpPostRequestGetJson," + ex.Message);
                 return string.Empty;
             }
             finally
@@ -177,86 +272,32 @@ namespace BaiduSpeechDemo
             }
         }
 
-        // Http post 消息来下载语音文件
-        private string HttpPostMessage(string url, string filePath)
+        // 使用 Media.SoundPlayer 播放 Http 请求的 wav 文件流
+        // 使用同步播放，播放完后才返回
+        public static Stream HttpPostRequestGetStream(string url)
         {
             try
             {
-                if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(filePath))
+                if (!string.IsNullOrEmpty(url))
                 {
-                    return "";
-                }
+                    System.Net.HttpWebRequest req = (System.Net.HttpWebRequest)System.Net.HttpWebRequest.Create(url);
+                    req.Timeout = 5000;
+                    req.Method = "POST";
+                    System.Net.HttpWebResponse rsp = (System.Net.HttpWebResponse)req.GetResponse();
 
-                System.Net.HttpWebRequest req = (System.Net.HttpWebRequest)System.Net.HttpWebRequest.Create(url);
-                req.Timeout = 3000;
-                System.Net.HttpWebResponse rsp = (System.Net.HttpWebResponse)req.GetResponse();
-
-                if (rsp?.ContentLength > 0)
-                {
-                    System.IO.Stream netStream = rsp.GetResponseStream();
-                    System.IO.Stream fileStream = new System.IO.FileStream(filePath, System.IO.FileMode.Create);
-                    byte[] buffer = new byte[8 * 1024];
-                    int readSize = netStream.Read(buffer, 0, (int)buffer.Length);
-
-                    while (readSize > 0)
+                    if (rsp?.ContentLength > 0)
                     {
-                        fileStream.Write(buffer, 0, readSize);
-                        readSize = netStream.Read(buffer, 0, (int)buffer.Length);
+                        return rsp.GetResponseStream();
                     }
-                    netStream.Close();
-                    fileStream.Close();
-                    return filePath;
                 }
             }
             catch (Exception e1)
             {
-                System.Diagnostics.Debug.WriteLine("Speakers HttpPostMessage," + e1.Message.ToString());
+                System.Diagnostics.Debug.WriteLine("Speakers HttpPostRequestGetStream," + e1.Message.ToString());
             }
-            return "";
+            return null;
         }
 
-        // 获取缓存目录
-        private string GetCachePath()
-        {
-            try
-            {
-                string TempDir = System.IO.Path.GetTempPath();
-                if (TempDir == null || TempDir.Length == 0)
-                {
-                    return "";
-                }
-                string CachePath = System.IO.Path.Combine(TempDir, @"BaiduSpeechDemo\Cache");
-                if (System.IO.Directory.Exists(CachePath) == false)
-                {
-                    System.IO.Directory.CreateDirectory(CachePath);
-                }
-                return CachePath;
-            }
-            catch (Exception e1)
-            {
-                System.Diagnostics.Debug.WriteLine("Speakers GetCachePath," + e1.Message.ToString());
-            }
-            return "";
-        }
-
-        // 获取本机 MAC 地址
-        public static string GetMacByNetworkInterface()
-        {
-            try
-            {
-                NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
-                foreach (NetworkInterface ni in interfaces)
-                {
-                    return BitConverter.ToString(ni.GetPhysicalAddress().GetAddressBytes());
-                }
-            }
-            catch (Exception e1)
-            {
-                System.Diagnostics.Debug.WriteLine("Speakers GetMacByNetworkInterface," + e1.Message.ToString());
-            }
-            return "00-00-00-00-00-00";
-        }
-        
         // Json 解析
         public static string GetArribute(string json, string key)
         {
@@ -283,6 +324,24 @@ namespace BaiduSpeechDemo
                 System.Diagnostics.Debug.WriteLine("Speakers GetArribute," + e1.Message.ToString());
             }
             return "";
+        }
+
+        // 获取本机 MAC 地址
+        public static string GetMacAddress()
+        {
+            try
+            {
+                NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
+                foreach (NetworkInterface ni in interfaces)
+                {
+                    return BitConverter.ToString(ni.GetPhysicalAddress().GetAddressBytes());
+                }
+            }
+            catch (Exception e1)
+            {
+                System.Diagnostics.Debug.WriteLine("Speakers GetMacAddress," + e1.Message.ToString());
+            }
+            return "00-00-00-00-00-00";
         }
     }
 }

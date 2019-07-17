@@ -22,23 +22,19 @@ namespace BaiduSpeechDemo
     public partial class MainWindow : Window
     {
         private Speakers speakers;
-
-        private MediaPlayer mediaPlayer = new MediaPlayer();
-
-        private System.Timers.Timer initTimer;
-
-        private string file;
-
+        private Timer initTimer;
+        
         public MainWindow()
         {
             InitializeComponent();
 
             speakers = Speakers.Instance();
 
-            initTimer = new System.Timers.Timer(1000);
+            initTimer = new Timer(500);
             initTimer.Elapsed += OnTimedEvent;
         }
 
+        // 初始化提示
         private void OnTimedEvent(object sender, ElapsedEventArgs e)
         {
             if (initTimer.Enabled)
@@ -46,7 +42,7 @@ namespace BaiduSpeechDemo
 
             this.Dispatcher.Invoke(() =>
             {
-                if(speakers.initStatus)
+                if(speakers.isInit)
                 {
                     TipsText.Text = "初始化 SDK 成功，请输入文本测试！";
                     InitButton.IsEnabled = false;
@@ -62,66 +58,12 @@ namespace BaiduSpeechDemo
             });
         }
 
-        private void PlaySound_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if(speakers.initStatus)
-                {
-                    if (!string.IsNullOrEmpty(SpeakText?.Text))
-                    {
-                        file = speakers?.Speak(SpeakText.Text);
-                        if (!string.IsNullOrEmpty(file))
-                        {
-                            TipsText.Text = string.Format("语音文件保存在：{0}", file);
-                            OpenExplorerButton.Visibility = Visibility.Visible;
-                            mediaPlayer.Open(new Uri(file, UriKind.Relative));
-                            mediaPlayer.Play();
-                            return;
-                        }
-                        else
-                        {
-                            TipsText.Text = "语音合成失败！";
-                        }
-                    }
-                    else
-                    {
-                        TipsText.Text = "文本为空！";
-                    }
-                }
-                else
-                {
-                    TipsText.Text = "请先初始化 SDK 再进行语音合成！";
-                }
-            }
-            catch (Exception e1)
-            {
-                System.Diagnostics.Debug.WriteLine("PlaySound_Click " + e1.Message.ToString());
-            }
-            OpenExplorerButton.Visibility = Visibility.Hidden;
-            file = "";
-        }
-
-        private void OpenExplorer_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (!string.IsNullOrEmpty(file))
-                {
-                    System.Diagnostics.Process.Start("Explorer.exe", System.IO.Path.GetDirectoryName(file));
-                }
-            }
-            catch (Exception e1)
-            {
-                System.Diagnostics.Debug.WriteLine("OpenExplorer_Click " + e1.Message.ToString());
-            }
-        }
-
+        // 初始化
         private void Init_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if(!speakers.initStatus)
+                if (!speakers.isInit)
                 {
                     if (!string.IsNullOrEmpty(APIKey.Text) && !string.IsNullOrEmpty(SecretKey.Text))
                     {
@@ -144,7 +86,35 @@ namespace BaiduSpeechDemo
             }
             catch (Exception e1)
             {
-                System.Diagnostics.Debug.WriteLine("OpenExplorer_Click " + e1.Message.ToString());
+                System.Diagnostics.Debug.WriteLine("Init_Click " + e1.Message.ToString());
+            }
+        }
+
+        // 语音合成
+        private void PlaySound_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if(speakers.isInit)
+                {
+                    if (!string.IsNullOrEmpty(SpeakText?.Text))
+                    {
+                        speakers.Speak(SpeakText.Text);
+                        TipsText.Text = "";
+                    }
+                    else
+                    {
+                        TipsText.Text = "文本为空！";
+                    }
+                }
+                else
+                {
+                    TipsText.Text = "请先初始化 SDK 再进行语音合成！";
+                }
+            }
+            catch (Exception e1)
+            {
+                System.Diagnostics.Debug.WriteLine("PlaySound_Click " + e1.Message.ToString());
             }
         }
     }
