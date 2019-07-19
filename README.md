@@ -2,6 +2,11 @@
 
 百度语音合成、语音识别的 PC 端示例
 
+## TODO
+
+* [x] 语言合成
+* [ ] 语言识别
+
 ## 语音合成
 
 * [语音合成](https://ai.baidu.com/tech/speech/tts)
