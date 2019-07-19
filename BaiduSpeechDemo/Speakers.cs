@@ -20,6 +20,24 @@ namespace BaiduSpeechDemo
             return _instance ?? (_instance = new Speakers());
         }
 
+        #region  百度 TTS 参数配置
+
+        // 默认的 发音人
+        private static readonly string default_per = "0";
+        // 默认的 音量
+        private static readonly string default_vol = "5";
+        // 默认的 语速
+        private static readonly string default_spd = "5";
+        // 默认的 音调
+        private static readonly string default_pit = "5";
+
+        // 默认的客户端类型（这个接口是 web 端，只能是 1）
+        private static readonly string default_ctp = "1";
+        // 默认的 语言（只有中英文混合模式，只能是 zh）
+        private static readonly string default_lan = "zh";
+        // 默认的 音频格式（因为 SoundPlayer 只能使用 wav 流来构造播放，只能是 6）
+        private static readonly string default_aue = "6";
+
         private struct BaiduTTSConfig
         {
             // API Key
@@ -35,7 +53,7 @@ namespace BaiduSpeechDemo
             // （必填）开放平台获取到的开发者 access_token
             public string tok;
             // （必填）合成的文本，使用UTF-8编码。小于2048个中文字或者英文数字。（文本在百度服务器内转换为GBK后，长度必须小于4096字节）
-            public string tex;
+            //public string tex;
             // （选填）音量，取值0-15，默认为5中音量
             public string vol;
             // （选填）发音人选择, 0为普通女声，1为普通男生，3为情感合成-度逍遥，4为情感合成-度丫丫，默认为普通女声
@@ -47,6 +65,8 @@ namespace BaiduSpeechDemo
             // （选填）3为mp3格式(默认)； 4为pcm-16k；5为pcm-8k；6为wav（内容同pcm-16k）; 注意aue=4或者6是语音识别要求的格式，但是音频内容不是语音识别要求的自然人发音，所以识别效果会受影响。
             public string aue;
         }
+        #endregion
+
         private BaiduTTSConfig baiduTTSConfig;
 
         public bool isInit = false;
@@ -67,14 +87,14 @@ namespace BaiduSpeechDemo
                 // 使用默认参数构造百度TTS
                 baiduTTSConfig = new BaiduTTSConfig()
                 {
-                    lan = "zh",
-                    ctp = "1",
+                    lan = default_lan,
+                    ctp = default_ctp,
                     cuid = GetMacAddress(),
-                    vol = "15",
-                    per = "0",
-                    spd = "5",
-                    pit = "5",
-                    aue = "6"
+                    vol = default_vol,
+                    per = default_per,
+                    spd = default_spd,
+                    pit = default_pit,
+                    aue = default_aue
                 };
             }
             catch (Exception e1)
@@ -179,6 +199,7 @@ namespace BaiduSpeechDemo
             }
         }
 
+        #region  队列消费者
         // 文本请求队列消费者
         // 文本从文本请求队列出队，用于 Http 请求，把请求到的音频文件流入队流播放队列
         private void TextRequestQueueConsumer()
@@ -245,9 +266,12 @@ namespace BaiduSpeechDemo
                 System.Diagnostics.Debug.WriteLine("Speakers StreamPlayQueueConsumer, " + e1.Message);
             }
         }
+        #endregion
+
+        #region  HTTP 管理
 
         // Http 请求 Json 数据
-        public static string HttpPostRequestGetJson(string url)
+        private static string HttpPostRequestGetJson(string url)
         {
             HttpWebRequest request = null;
             HttpWebResponse response = null;
@@ -274,7 +298,7 @@ namespace BaiduSpeechDemo
 
         // 使用 Media.SoundPlayer 播放 Http 请求的 wav 文件流
         // 使用同步播放，播放完后才返回
-        public static Stream HttpPostRequestGetStream(string url)
+        private static Stream HttpPostRequestGetStream(string url)
         {
             try
             {
@@ -299,7 +323,7 @@ namespace BaiduSpeechDemo
         }
 
         // Json 解析
-        public static string GetArribute(string json, string key)
+        private static string GetArribute(string json, string key)
         {
             try
             {
@@ -325,9 +349,12 @@ namespace BaiduSpeechDemo
             }
             return "";
         }
+        #endregion
 
+        #region  MAC 管理
+        
         // 获取本机 MAC 地址
-        public static string GetMacAddress()
+        private static string GetMacAddress()
         {
             try
             {
@@ -343,5 +370,6 @@ namespace BaiduSpeechDemo
             }
             return "00-00-00-00-00-00";
         }
+        #endregion
     }
 }
