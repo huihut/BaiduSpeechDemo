@@ -337,6 +337,45 @@ namespace BaiduSpeechDemo
             return null;
         }
 
+        // Http post 消息来下载语音文件
+        public static string HttpPostRequestGetFile(string url, string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(filePath))
+                {
+                    return "";
+                }
+
+                System.Net.HttpWebRequest req = (System.Net.HttpWebRequest)System.Net.HttpWebRequest.Create(url);
+                req.Timeout = 5000;
+                req.Method = "POST";
+                System.Net.HttpWebResponse rsp = (System.Net.HttpWebResponse)req.GetResponse();
+
+                if (rsp?.ContentLength > 0)
+                {
+                    System.IO.Stream netStream = rsp.GetResponseStream();
+                    System.IO.Stream fileStream = new System.IO.FileStream(filePath, System.IO.FileMode.Create);
+                    byte[] buffer = new byte[8 * 1024];
+                    int readSize = netStream.Read(buffer, 0, (int)buffer.Length);
+
+                    while (readSize > 0)
+                    {
+                        fileStream.Write(buffer, 0, readSize);
+                        readSize = netStream.Read(buffer, 0, (int)buffer.Length);
+                    }
+                    netStream.Close();
+                    fileStream.Close();
+                    return filePath;
+                }
+            }
+            catch (Exception e1)
+            {
+                System.Diagnostics.Debug.WriteLine("Speakers HttpPostRequestGetFile," + e1.Message.ToString());
+            }
+            return "";
+        }
+
         // Json 解析
         private static string GetArribute(string json, string key)
         {
@@ -366,8 +405,32 @@ namespace BaiduSpeechDemo
         }
         #endregion
 
-        #region  MAC 管理
-        
+        #region  文件工具管理
+
+        // 获取缓存目录
+        public static string GetCachePath()
+        {
+            try
+            {
+                string TempDir = System.IO.Path.GetTempPath();
+                if (TempDir == null || TempDir.Length == 0)
+                {
+                    return "";
+                }
+                string CachePath = System.IO.Path.Combine(TempDir, @"BaiduSpeechDemo\Cache");
+                if (System.IO.Directory.Exists(CachePath) == false)
+                {
+                    System.IO.Directory.CreateDirectory(CachePath);
+                }
+                return CachePath;
+            }
+            catch (Exception e1)
+            {
+                System.Diagnostics.Debug.WriteLine("Speakers GetCachePath," + e1.Message.ToString());
+            }
+            return "";
+        }
+
         // 获取本机 MAC 地址
         private static string GetMacAddress()
         {
