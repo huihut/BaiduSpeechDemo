@@ -311,7 +311,22 @@ namespace BaiduSpeechDemo
 
                     if (rsp?.ContentLength > 0)
                     {
-                        return rsp.GetResponseStream();
+                        MemoryStream memStream;
+                        using (Stream response = rsp.GetResponseStream())
+                        {
+                            memStream = new MemoryStream();
+                            byte[] buffer = new byte[1024];
+                            int byteCount;
+                            do
+                            {
+                                byteCount = response.Read(buffer, 0, buffer.Length);
+                                memStream.Write(buffer, 0, byteCount);
+                            } while (byteCount > 0);
+                        }
+                        memStream.Seek(0, SeekOrigin.Begin);
+                        rsp.Close();
+
+                        return memStream;
                     }
                 }
             }
